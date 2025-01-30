@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Area Selection</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+        user-select: none;
+        -webkit-app-region: no-drag;
+      }
+      #selection {
+        position: fixed;
+        border: 2px solid #4299e1;
+        background: rgba(66, 153, 225, 0.2);
+        display: none;
+        pointer-events: none;
+        z-index: 1000;
+      }
+      #instructions {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        padding: 8px 16px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 4px;
+        font-family: system-ui;
+        z-index: 1001;
+        pointer-events: none;
+      }
+      #dimensions {
+        position: fixed;
+        background: #4299e1;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: system-ui;
+        font-size: 12px;
+        pointer-events: none;
+        z-index: 1001;
+      }
+      #overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 999;
+        cursor: crosshair;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="instructions">Click and drag to select an area. Press ESC to cancel.</div>
+    <div id="selection"></div>
+    <div id="dimensions"></div>
+    <div id="overlay"></div>
+    <script>
+      const selection = document.getElementById('selection');
+      const dimensions = document.getElementById('dimensions');
+      const overlay = document.getElementById('overlay');
+      let isSelecting = false;
+      let startX = 0;
+      let startY = 0;
+
+      overlay.addEventListener('mousedown', (e) => {
+        isSelecting = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        selection.style.display = 'block';
+        dimensions.style.display = 'none';
+      });
+
+      overlay.addEventListener('mousemove', (e) => {
+        if (!isSelecting) return;
+
+        const x = Math.min(e.clientX, startX);
+        const y = Math.min(e.clientY, startY);
+        const width = Math.abs(e.clientX - startX);
+        const height = Math.abs(e.clientY - startY);
+
+        selection.style.left = x + 'px';
+        selection.style.top = y + 'px';
+        selection.style.width = width + 'px';
+        selection.style.height = height + 'px';
+
+        dimensions.style.display = 'block';
+        dimensions.style.left = (x + width / 2) + 'px';
+        dimensions.style.top = (y + height + 10) + 'px';
+        dimensions.textContent = `${Math.round(width)} × ${Math.round(height)}`;
+      });
+
+      overlay.addEventListener('mouseup', async (e) => {
+        if (!isSelecting) return;
+        isSelecting = false;
+
+        const width = Math.abs(e.clientX - startX);
+        const height = Math.abs(e.clientY - startY);
+        
+        if (width > 10 && height > 10) {
+          try {
+            const area = {
+              x: Math.min(e.clientX, startX),
+              y: Math.min(e.clientY, startY),
+              width,
+              height
+            };
+            console.log('Sending area selection:', area);
+            
+            // First emit the event
+            await window.electron.ipcRenderer.invoke('AREA_SELECTED', area);
+            
+            // Then close the window
+            window.close();
+          } catch (error) {
+            console.error('Error sending area selection:', error);
+          }
+        } else {
+          console.log('Area too small, ignoring');
+        }
+      });
+
+      document.addEventListener('keydown', async (e) => {
+        if (e.key === 'Escape') {
+          try {
+            await window.electron.ipcRenderer.invoke('CANCEL_SELECTION');
+            window.close();
+          } catch (error) {
+            console.error('Error canceling selection:', error);
+          }
+        }
+      });
+    </script>
+  </body>
+</html> 

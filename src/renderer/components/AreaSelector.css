@@ -1,0 +1,48 @@
+.area-selector-overlay {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
+  z-index: 10000;
+  user-select: none;
+}
+
+.area-selector-instructions {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  padding: 8px 16px;
+  background-color: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 10001;
+  pointer-events: none;
+}
+
+.area-selector-box {
+  position: absolute;
+  border: 2px solid #4299e1;
+  background-color: rgba(66, 153, 225, 0.2);
+  z-index: 10001;
+}
+
+.area-selector-dimensions {
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #4299e1;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+} 
