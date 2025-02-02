@@ -4,7 +4,8 @@ import { exec } from 'child_process';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
-import { FfmpegCommand } from 'fluent-ffmpeg';
+import type { FfmpegCommand } from 'fluent-ffmpeg';
+import isDev from 'electron-is-dev';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -54,6 +55,14 @@ let originalWindowState: WindowState = {
   skipTaskbar: false,
   backgroundColor: '#ffffff'
 };
+
+// Add missing interface
+interface CodecData {
+  duration: string;
+  format?: string;
+  audio?: string;
+  video?: string;
+}
 
 const createSelectionWindow = (): BrowserWindow => {
   console.log('Creating selection window');
@@ -457,72 +466,112 @@ ipcMain.handle('GET_ALL_SOURCES', async () => {
   }
 });
 
-ipcMain.handle('SAVE_VIDEO', async (_, { buffer, format, quality, fps }) => {
-  const extension = format === 'mp4' ? 'mp4' : 'webm';
-  const { filePath, canceled } = await dialog.showSaveDialog({
-    buttonLabel: 'Save video',
-    defaultPath: `screen-recording-${Date.now()}.${extension}`,
-    filters: [{ name: 'Videos', extensions: [extension] }]
+interface ConversionProgress {
+  frames: number;
+  currentFps: number;
+  currentKbps: number;
+  targetSize: number;
+  timemark: string;
+  percent?: number;
+}
+
+// Add type for the command handler
+const handleFFmpegCommand = (cmd: FfmpegCommand) => {
+  return new Promise<void>((resolve, reject) => {
+    cmd
+      .on('start', (commandLine: string) => {
+        console.log('FFmpeg started:', commandLine);
+      })
+      .on('progress', (progress: ConversionProgress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('CONVERSION_PROGRESS', {
+            percent: progress.percent || 0
+          });
+        }
+      })
+      .on('end', () => {
+        console.log('FFmpeg processing finished');
+        resolve();
+      })
+      .on('error', (err: Error) => {
+        console.error('FFmpeg error:', err);
+        reject(err);
+      });
   });
+};
 
-  if (canceled || !filePath) return null;
+// Add type for the data handler
+const handleStreamData = (data: Buffer) => {
+  console.log('Received data chunk:', data.length, 'bytes');
+  // Process data as needed
+};
 
+// Update the SAVE_VIDEO handler
+ipcMain.handle('SAVE_VIDEO', async (_, { buffer, format, quality, fps }) => {
   try {
+    // Create temp file for WebM
     const tempWebmPath = path.join(app.getPath('temp'), `temp-${Date.now()}.webm`);
-    await require('fs').promises.writeFile(tempWebmPath, Buffer.from(buffer));
+    await require('fs').promises.writeFile(tempWebmPath, buffer);
+
+    // Get save path from user
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: `recording-${Date.now()}.${format}`,
+      filters: [{ name: format.toUpperCase(), extensions: [format] }]
+    });
+
+    if (canceled || !filePath) {
+      require('fs').unlink(tempWebmPath, () => {});
+      throw new Error('Save cancelled');
+    }
 
     if (format === 'mp4') {
       const outputPath = filePath.endsWith('.mp4') ? filePath : `${filePath}.mp4`;
       
-      await new Promise<void>((resolve, reject) => {
-        let lastPercent = 0;
-        let startTime = Date.now();
-        let totalDuration = 0;
+      let totalDuration = 0;
+      let startTime = Date.now();
 
-        ffmpeg(tempWebmPath)
-          .outputOptions([
-            '-c:v libx264',
-            '-preset medium',
-            '-crf 18',
-            '-c:a aac',
-            '-b:a 192k',
-            '-movflags +faststart',
-            '-pix_fmt yuv420p',
-            '-r ' + fps,
-            quality === 'high' ? '-b:v 8M' : '-b:v 4M',
-            '-y'
-          ])
-          .on('start', (cmd) => {
-            console.log('Started FFmpeg with command:', cmd);
-            mainWindow?.webContents.send('CONVERSION_PROGRESS', 0);
-          })
-          .on('codecData', (data) => {
-            // Get duration in seconds
-            const timeParts = data.duration.split(':').map(Number);
-            totalDuration = (timeParts[0] * 3600) + (timeParts[1] * 60) + timeParts[2];
-            console.log('Total duration:', totalDuration, 'seconds');
-          })
-          .on('progress', (progress) => {
-            // Parse current time
-            const timeParts = progress.timemark.split(':');
-            const currentTime = (parseInt(timeParts[0]) * 3600) + 
-                              (parseInt(timeParts[1]) * 60) + 
-                              parseFloat(timeParts[2]);
+      const command = ffmpeg(tempWebmPath)
+        .outputOptions([
+          '-c:v libx264',
+          '-preset medium',
+          '-crf 23',
+          '-c:a aac',
+          '-b:a 128k',
+          '-movflags +faststart',
+          '-y'
+        ])
+        .on('start', (cmd: string) => {
+          console.log('FFmpeg started with command:', cmd);
+        })
+        .on('codecData', (data: CodecData) => {
+          console.log('Input codec data:', data);
+          // Get duration in seconds
+          const timeParts = data.duration.split(':').map(Number);
+          totalDuration = (timeParts[0] * 3600) + (timeParts[1] * 60) + timeParts[2];
+          console.log('Total duration:', totalDuration, 'seconds');
+        })
+        .on('progress', (progress: ConversionProgress) => {
+          // Extract current time in seconds
+          const timeMatch = progress.timemark.match(/(\d+):(\d+):(\d+)\.(\d+)/);
+          if (timeMatch) {
+            const [, hours, minutes, seconds] = timeMatch.map(Number);
+            const currentTime = (hours * 3600) + (minutes * 60) + seconds;
 
             if (totalDuration > 0) {
               // Use video duration for progress
               const percent = Math.min((currentTime / totalDuration) * 100, 99);
-              lastPercent = Math.max(lastPercent, percent);
+              mainWindow?.webContents.send('CONVERSION_PROGRESS', percent);
             } else {
               // Fallback to elapsed time estimation
               const elapsedMs = Date.now() - startTime;
-              const estimatedPercent = Math.min((elapsedMs / 5000) * 100, 99); // Assume 5s minimum
-              lastPercent = Math.max(lastPercent, estimatedPercent);
+              const estimatedPercent = Math.min((elapsedMs / 5000) * 100, 99);
+              mainWindow?.webContents.send('CONVERSION_PROGRESS', estimatedPercent);
             }
+          }
+        });
 
-            console.log(`Processing time: ${progress.timemark} (${lastPercent.toFixed(1)}%)`);
-            mainWindow?.webContents.send('CONVERSION_PROGRESS', lastPercent);
-          })
+      await new Promise<void>((resolve, reject) => {
+        command
           .on('end', () => {
             console.log('FFmpeg processing finished');
             mainWindow?.webContents.send('CONVERSION_PROGRESS', 100);

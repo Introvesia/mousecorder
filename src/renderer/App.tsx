@@ -7,85 +7,7 @@ import AudioMeter from './components/AudioMeter';
 import { ipcRenderer } from 'electron';
 import RecordingUI from './components/RecordingUI';
 import ConversionProgress from './components/ConversionProgress';
-
-declare global {
-  interface Window {
-    electron: {
-      ipcRenderer: {
-        invoke(channel: string, ...args: any[]): Promise<any>;
-        on(channel: string, callback: (...args: any[]) => void): void;
-      };
-    };
-  }
-
-  interface MediaTrackConstraintSet {
-    chromeMediaSource?: string;
-    chromeMediaSourceId?: string;
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-  }
-
-  interface DesktopCapturerConstraints extends MediaTrackConstraints {
-    mandatory?: {
-      chromeMediaSource?: string;
-      chromeMediaSourceId?: string;
-    };
-  }
-
-  interface DesktopCapturerSource {
-    id: string;
-    name: string;
-    thumbnail: Electron.NativeImage;
-    display_id?: string;
-  }
-
-  interface MediaStreamConstraintSet {
-    mandatory?: {
-      chromeMediaSource?: 'desktop' | 'screen';
-      chromeMediaSourceId?: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface CustomMediaTrackConstraints extends MediaTrackConstraints {
-    mandatory?: {
-      chromeMediaSource?: 'desktop' | 'screen';
-      chromeMediaSourceId?: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface DesktopCaptureMediaTrackConstraints {
-    mandatory: {
-      chromeMediaSource: 'desktop';
-      chromeMediaSourceId: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface CustomMediaStreamConstraints {
-    audio: boolean | DesktopCaptureMediaTrackConstraints;
-    video: DesktopCaptureMediaTrackConstraints;
-  }
-
-  interface Area {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }
-}
+import { VideoSettings } from '../../electron/types';
 
 declare const navigator: Navigator & {
   userAgentData?: {
@@ -93,18 +15,8 @@ declare const navigator: Navigator & {
   };
 };
 
-interface VideoSettings {
-  sourceId: string;
-  includeAudio: boolean;
-  format: string;
-  quality: string;
-  fps: number;
-  areaSelection: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null;
+interface CustomMediaStream extends MediaStream {
+  updatePosition?: (x: number, y: number) => void;
 }
 
 interface Source {
@@ -125,58 +37,37 @@ const App: React.FC = () => {
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [sources, setSources] = useState<Source[]>([]);
-  const [settings, setSettings] = useState<VideoSettings>(() => {
-    const initialSettings = {
-      sourceId: '',
-      includeAudio: false,
-      format: 'mp4',
-      quality: 'high',
-      fps: 30,
-      areaSelection: null
-    };
-    console.log('Initial settings:', initialSettings);
-    return initialSettings;
-  });
+  const [settings, setSettings] = useState<VideoSettings>(() => ({
+    sourceId: '',
+    includeAudio: false,
+    format: 'mp4',
+    quality: 'high',
+    fps: 30,
+    areaSelection: null
+  }));
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout>();
   const [hasBlackHole, setHasBlackHole] = useState(false);
   const previewRef = useRef<HTMLVideoElement>(null);
-  const previewStreamRef = useRef<MediaStream | null>(null);
-  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const previewStreamRef = useRef<CustomMediaStream | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicDevice, setSelectedMicDevice] = useState<string>('');
+  const [isYouTubeShorts, setIsYouTubeShorts] = useState(true);
+  const shortsRef = useRef<{ x: number; y: number } | null>(null);
+  const [shortsZoom, setShortsZoom] = useState(2.8);
+  const [showRecordingPreview, setShowRecordingPreview] = useState(true);
+  const recordingPreviewRef = useRef<HTMLVideoElement>(null);
+  const [autoMovePreview, setAutoMovePreview] = useState(false);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
 
   // Add these refs for audio context
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
-  // Add new state for mic devices and selected device
-  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedMicDevice, setSelectedMicDevice] = useState<string>('');
-
   // Add new state for YouTube Shorts mode
-  const [isYouTubeShorts, setIsYouTubeShorts] = useState(true);
-  const shortsRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Add zoom state
-  const [shortsZoom, setShortsZoom] = useState(2.8);
-
-  // Add a ref for cleanup function
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  // Add a ref for recording stream
-  const recordingStreamRef = useRef<any>(null);
-
-  // Add new state and ref for recording preview
-  const [showRecordingPreview, setShowRecordingPreview] = useState(true);
-  const recordingPreviewRef = useRef<HTMLVideoElement>(null);
-
-  // Add new state for auto-move
-  const [autoMovePreview, setAutoMovePreview] = useState(false);
-
-  // Add new state
   const [isConverting, setIsConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState(0);
 
@@ -257,7 +148,7 @@ const App: React.FC = () => {
           };
 
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          previewStreamRef.current = stream;
+          previewStreamRef.current = stream as CustomMediaStream;
           previewRef.current.srcObject = stream;
         } catch (error) {
           console.error('Error starting preview:', error);
@@ -336,7 +227,7 @@ const App: React.FC = () => {
     };
   }, [micEnabled, recording, selectedMicDevice]);
 
-  const getVideoConstraints = (quality: string) => {
+  const getVideoConstraints = (quality: string): MediaTrackConstraints => {
     const qualities = {
       high: { width: 1920, height: 1080 },
       medium: { width: 1280, height: 720 },
@@ -345,7 +236,7 @@ const App: React.FC = () => {
     return qualities[quality as keyof typeof qualities];
   };
 
-  const getMimeType = (format: string) => {
+  const getMimeType = (format: string): string => {
     const mimeTypes = {
       'webm': 'video/webm;codecs=vp9',
       'mp4': 'video/mp4'
@@ -396,9 +287,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDataAvailable = (event: BlobEvent) => {
+    if (event.data && event.data.size > 0) {
+      setRecordedChunks(prev => [...prev, event.data]);
+    }
+  };
+
   const startRecording = async () => {
+    setRecordedChunks([]); // Clear previous recording
     window.electron.ipcRenderer.invoke('START_RECORDING');
     try {
+      // Get screen stream
       const screenStream = await navigator.mediaDevices.getUserMedia({
         video: {
           mandatory: {
@@ -414,132 +313,49 @@ const App: React.FC = () => {
         } : false
       } as any);
 
-      let finalStream: MediaStream = screenStream;
+      // Create audio context for mixing
+      const audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
 
-      if (isYouTubeShorts) {
-        const shortsWidth = 1080;
-        const shortsHeight = 1920;
-        
-        const stream = await cropStream(finalStream, {
-          x: shortsRef.current?.x || 0,
-          y: shortsRef.current?.y || 0,
-          width: shortsWidth,
-          height: shortsHeight,
-          isShorts: true,
-          zoom: shortsZoom
-        });
-        
-        // Store the stream reference for position updates
-        recordingStreamRef.current = stream;
-        finalStream = stream;
-      } else if (settings.areaSelection) {
-        finalStream = await cropStream(finalStream, {
-          ...settings.areaSelection,
-          isShorts: false
-        });
+      // Add system audio if enabled
+      if (settings.includeAudio) {
+        const systemSource = audioContext.createMediaStreamSource(screenStream);
+        systemSource.connect(destination);
       }
 
-      // Collect all tracks
-      const tracks = [...finalStream.getVideoTracks()];
-      
-      // Add system audio if present
-      if (finalStream.getAudioTracks().length > 0) {
-        tracks.push(finalStream.getAudioTracks()[0]);
-        console.log('Added system audio track');
-      }
-
-      // Add microphone track if enabled
-      if (micEnabled && micStream) {
-        const micTrack = micStream.getAudioTracks()[0];
-        if (micTrack) {
-          tracks.push(micTrack.clone()); // Clone the track to avoid conflicts
-          console.log('Added microphone track:', {
-            label: micTrack.label,
-            enabled: micTrack.enabled,
-            muted: micTrack.muted
+      // Add microphone audio if enabled
+      if (micEnabled && selectedMicDevice) {
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: selectedMicDevice,
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
           });
+          const micSource = audioContext.createMediaStreamSource(micStream);
+          micSource.connect(destination);
+        } catch (error) {
+          console.error('Error accessing microphone:', error);
         }
       }
 
-      // Create final stream
-      finalStream = new MediaStream(tracks);
-      console.log('Final stream tracks:', {
-        video: finalStream.getVideoTracks().length,
-        audio: finalStream.getAudioTracks().length,
-        audioTracks: finalStream.getAudioTracks().map(t => t.label)
+      // Combine video and audio streams
+      const tracks = [
+        ...screenStream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ];
+      const combinedStream = new MediaStream(tracks);
+
+      const mediaRecorder = new MediaRecorder(combinedStream, {
+        mimeType: 'video/webm;codecs=vp9'
       });
 
-      // Get the stored area selection
-      const storedArea = await window.electron.ipcRenderer.invoke('GET_SELECTED_AREA');
-      console.log('Retrieved stored area:', storedArea);
-      
-      // If area is selected, crop the stream
-      if (storedArea && 
-          typeof storedArea === 'object' &&
-          storedArea.width > 0 && 
-          storedArea.height > 0) {
-        console.log('Starting stream crop with stored area:', JSON.stringify(storedArea, null, 2));
-        finalStream = await cropStream(finalStream, storedArea);
-      }
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.ondataavailable = handleDataAvailable;
 
-      // Set up MediaRecorder
-      const options: MediaRecorderOptions = {
-        mimeType: 'video/webm;codecs=vp8,opus', // Always use VP8 for recording
-        videoBitsPerSecond: settings.quality === 'high' ? 5000000 : 2500000,
-        audioBitsPerSecond: 128000
-      };
-
-      mediaRecorderRef.current = new MediaRecorder(finalStream, options);
-      recordedChunksRef.current = [];
-
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          recordedChunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorderRef.current.onstop = async () => {
-        try {
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          const buffer = await blob.arrayBuffer();
-
-          window.electron.ipcRenderer.invoke('STOP_RECORDING');
-          
-          if (settings.format === 'mp4') {
-            setIsConverting(true);
-            setConversionProgress(0);
-          }
-
-          // Listen for progress updates
-          window.electron.ipcRenderer.on('CONVERSION_PROGRESS', (progress: number) => {
-            setConversionProgress(progress);
-          });
-
-          const filePath = await window.electron.ipcRenderer.invoke('SAVE_VIDEO', {
-            buffer,
-            format: settings.format,
-            quality: settings.quality,
-            fps: settings.fps
-          });
-          
-          setIsConverting(false);
-          
-          // Clean up the cropped stream if it exists
-          if ((finalStream as any).cleanup) {
-            (finalStream as any).cleanup();
-          }
-
-          if (filePath) {
-            console.log('Video saved to:', filePath);
-          }
-        } catch (error) {
-          setIsConverting(false);
-          console.error('Error saving video:', error);
-          alert('Failed to save video. Please try again.');
-        }
-      };
-
-      mediaRecorderRef.current.start(1000);
+      mediaRecorder.start(100); // Collect data every 100ms
       setRecording(true);
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
@@ -549,13 +365,18 @@ const App: React.FC = () => {
       console.error('Error starting recording:', error);
       setRecording(false);
       setRecordingTime(0);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to start recording: ${errorMessage}`);
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      // Create a Promise to wait for the final chunk of data
+      const finalChunk = new Promise<void>((resolve) => {
+        if (mediaRecorderRef.current) {
+          mediaRecorderRef.current.onstop = () => resolve();
+        }
+      });
+
       mediaRecorderRef.current.stop();
       setRecording(false);
       setRecordingTime(0);
@@ -563,13 +384,45 @@ const App: React.FC = () => {
         clearInterval(timerRef.current);
       }
       
-      // Clean up the stream
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
+      // Stop all tracks
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+
+      // Wait for the final chunk
+      await finalChunk;
+
+      // Now that we have all chunks, create the blob and save
+      if (recordedChunks.length > 0) {
+        const blob = new Blob(recordedChunks, {
+          type: 'video/webm;codecs=vp9'
+        });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `mousecorder-recording-${timestamp}`;
+
+        try {
+          const result = await window.electron.ipcRenderer.invoke('SAVE_VIDEO', {
+            blob: Array.from(new Uint8Array(await blob.arrayBuffer())),
+            filePath: filename
+          });
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to save video');
+          }
+
+          console.log('Video saved successfully at:', result.path);
+        } catch (error) {
+          console.error('Error saving video:', error);
+        }
       }
     }
   };
+
+  // Keep the preview effect
+  useEffect(() => {
+    if (recording && recordingPreviewRef.current && previewStreamRef.current) {
+      recordingPreviewRef.current.srcObject = previewStreamRef.current;
+    }
+  }, [recording]);
 
   const showAudioWarning = () => {
     if (isMacOS()) {
@@ -625,8 +478,8 @@ const App: React.FC = () => {
         shortsRef.current = { x, y };
 
         // Update stream position if recording
-        if (recording && recordingStreamRef.current?.updatePosition) {
-          recordingStreamRef.current.updatePosition(x, y);
+        if (recording && previewStreamRef.current?.updatePosition) {
+          previewStreamRef.current.updatePosition(x, y);
         }
 
         // Only update settings if not recording
@@ -655,14 +508,8 @@ const App: React.FC = () => {
         window.removeEventListener('mouse-position', handleGlobalMouseMove as EventListener);
       };
     }
-  }, [isYouTubeShorts, recording]);
-
-  // Add this effect to handle recording preview
-  useEffect(() => {
-    if (recording && recordingPreviewRef.current && recordingStreamRef.current) {
-      recordingPreviewRef.current.srcObject = recordingStreamRef.current;
-    }
-  }, [recording]);
+    return undefined;
+  }, [isYouTubeShorts, recording, settings]);
 
   // Add effect to set initial source for YouTube Shorts
   useEffect(() => {
@@ -693,6 +540,8 @@ const App: React.FC = () => {
             setShowRecordingPreview={setShowRecordingPreview}
             recordingPreviewRef={recordingPreviewRef}
             autoMove={autoMovePreview}
+            isRecording={recording}
+            recordedChunks={recordedChunks}
           />
         ) : (
           <>

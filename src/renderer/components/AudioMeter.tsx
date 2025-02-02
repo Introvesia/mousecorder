@@ -1,72 +1,61 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import './AudioMeter.css';
 
 interface AudioMeterProps {
-  stream: MediaStream | null;
+  stream: MediaStream;
 }
 
 const AudioMeter: React.FC<AudioMeterProps> = ({ stream }) => {
-  const [volume, setVolume] = useState<number>(0);
-  const analyserRef = useRef<AnalyserNode | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
+  const analyserRef = useRef<AnalyserNode>();
 
   useEffect(() => {
-    if (!stream) return;
+    if (!canvasRef.current) return;
 
-    try {
-      const audioContext = new AudioContext();
-      const analyser = audioContext.createAnalyser();
-      analyserRef.current = analyser;
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.8;
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyserRef.current = analyser;
 
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
+    source.connect(analyser);
+    analyser.fftSize = 256;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      const updateVolume = () => {
-        animationFrameRef.current = requestAnimationFrame(updateVolume);
-        analyser.getByteFrequencyData(dataArray);
+    const draw = () => {
+      if (!analyserRef.current) return;
+      animationFrameRef.current = requestAnimationFrame(draw);
 
-        // Calculate volume
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        const average = sum / dataArray.length;
-        const normalizedVolume = Math.min(average / 128, 1);
-        setVolume(normalizedVolume);
-      };
+      analyserRef.current.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((a, b) => a + b) / bufferLength;
 
-      updateVolume();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = `hsl(${120 - (average / 2)}, 100%, 50%)`;
+      ctx.fillRect(0, 0, (average / 255) * canvas.width, canvas.height);
+    };
 
-      return () => {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-        audioContext.close();
-      };
-    } catch (err) {
-      console.error('AudioMeter Error:', err);
-    }
+    draw();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      audioContext.close();
+    };
   }, [stream]);
 
   return (
-    <div className="audio-meter">
-      <div className="audio-meter-label">
-        Microphone Level
-      </div>
-      <div className="audio-meter-bar-container">
-        <div 
-          className="audio-meter-bar"
-          style={{ width: `${Math.round(volume * 100)}%` }}
-        />
-        <span className="audio-meter-value">
-          {Math.round(volume * 100)}%
-        </span>
-      </div>
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={200}
+      height={20}
+      className="audio-meter"
+    />
   );
 };
 
