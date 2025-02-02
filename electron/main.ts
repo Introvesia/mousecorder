@@ -118,10 +118,12 @@ const setupIpcHandlers = () => {
   // Recording state handlers
   ipcMain.handle('START_RECORDING', () => {
     isRecording = true;
+    mainWindow?.webContents.setBackgroundThrottling(false);
   });
 
   ipcMain.handle('STOP_RECORDING', () => {
     isRecording = false;
+    mainWindow?.webContents.setBackgroundThrottling(true);
   });
 
   // Area selection handlers
@@ -229,10 +231,25 @@ const createWindow = async (): Promise<void> => {
       sandbox: false,
       preload: path.join(__dirname, '../preload/preload.js'),
       webSecurity: true,
+      backgroundThrottling: false
     },
   });
 
-  // Remove the dev server check since wait-on handles it
+  // Add window focus/blur handlers
+  mainWindow.on('blur', () => {
+    if (isRecording) {
+      // Keep window active when recording
+      mainWindow?.webContents.setBackgroundThrottling(false);
+    }
+  });
+
+  mainWindow.on('focus', () => {
+    if (!isRecording) {
+      // Re-enable throttling when not recording
+      mainWindow?.webContents.setBackgroundThrottling(true);
+    }
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();

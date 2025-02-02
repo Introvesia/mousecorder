@@ -1,12 +1,11 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "composite": true,
+    "outDir": "dist/types",
     "declaration": true,
-    "declarationDir": "dist/types",
     "emitDeclarationOnly": true,
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "skipLibCheck": true
+    "isolatedModules": false
   },
-  "include": ["src/types/index.ts"]
+  "include": ["src/types/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 } 

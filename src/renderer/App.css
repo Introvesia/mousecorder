@@ -76,32 +76,6 @@
   background-color: #e53e3e;
 }
 
-.audio-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.audio-control-item {
-  display: flex;
-  align-items: center;
-}
-
-.audio-meter-label {
-  font-size: 0.875rem;
-  color: #4a5568;
-  margin-bottom: 5px;
-  font-weight: 500;
-}
-
-.audio-meter-wrapper {
-  margin-top: 10px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 8px;
-  width: 100%;
-}
-
 .checkbox-group {
   display: flex;
   flex-direction: column;
@@ -131,16 +105,6 @@
   background-color: #edf2f7;
 }
 
-.audio-warning {
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background-color: #fff3cd;
-  border: 1px solid #ffeeba;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  color: #856404;
-}
-
 .link {
   color: #2b6cb0;
   text-decoration: underline;
@@ -149,16 +113,6 @@
 
 .link:hover {
   color: #1a4971;
-}
-
-.audio-info {
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background-color: #e6f6ff;
-  border: 1px solid #bae3ff;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  color: #0c5460;
 }
 
 .sources-grid {
@@ -260,26 +214,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.mic-device-selector {
-  margin-top: 10px;
-  width: 100%;
-}
-
-.mic-device-selector select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background-color: white;
-  font-size: 0.875rem;
-  color: #4a5568;
-}
-
-.mic-device-selector select:disabled {
-  background-color: #edf2f7;
-  cursor: not-allowed;
 }
 
 .shorts-control {

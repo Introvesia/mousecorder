@@ -20,10 +20,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "release", "electron"],
-  "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.types.json" }
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "electron/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 } 

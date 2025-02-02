@@ -10,7 +10,8 @@
     "dev:electron": "vite build --watch --mode=development",
     "start:electron": "electron .",
     "dev": "npm run clean && concurrently -k \"npm run dev:vite\" \"npm run dev:electron\" \"npx wait-on http://localhost:5173 && npm run start:electron\"",
-    "build": "npm run clean && tsc && vite build && electron-builder",
+    "build:types": "tsc -p tsconfig.types.json",
+    "build": "npm run clean && npm run build:types && vite build && electron-builder",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
