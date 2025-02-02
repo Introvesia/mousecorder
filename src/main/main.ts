@@ -5,7 +5,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import type { FfmpegCommand } from 'fluent-ffmpeg';
-import isDev from 'electron-is-dev';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;

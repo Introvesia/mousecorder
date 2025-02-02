@@ -6,106 +6,16 @@
 }
 
 .title {
-  font-size: 2rem;
-  margin-bottom: 2rem;
   text-align: center;
+  color: #2d3748;
+  margin-bottom: 2rem;
 }
 
 .controls-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.settings-label {
-  font-weight: 600;
-}
-
-.select {
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  border: 1px solid #ccc;
-}
-
-.preview-container {
-  width: 100%;
-  aspect-ratio: 16/9;
-  margin: 1rem 0;
-  border: 1px solid #ccc;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-
-.preview-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.button {
-  padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.button-record {
-  background-color: #ef4444;
-  color: white;
-}
-
-.button-record:hover {
-  background-color: #dc2626;
-}
-
-.recording-mode {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-.recording-preview-container {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  width: 320px;
-  aspect-ratio: 16/9;
-  border: 2px solid #ef4444;
-  border-radius: 0.5rem;
-  overflow: hidden;
-  background-color: black;
-}
-
-.recording-preview-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.audio-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.audio-control-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.checkbox {
-  width: 1rem;
-  height: 1rem;
-}
-
-.checkbox-label {
-  font-size: 0.9rem;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .timer {
@@ -116,6 +26,47 @@
   margin-bottom: 1.5rem;
 }
 
+.settings-group {
+  margin-bottom: 1.5rem;
+}
+
+.settings-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #4a5568;
+}
+
+.select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background-color: #f7fafc;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
+.button {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.button-record {
+  background-color: #4299e1;
+  color: white;
+}
+
+.button-record:hover {
+  background-color: #3182ce;
+}
+
 .button-stop {
   background-color: #f56565;
   color: white;
@@ -123,6 +74,17 @@
 
 .button-stop:hover {
   background-color: #e53e3e;
+}
+
+.audio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.audio-control-item {
+  display: flex;
+  align-items: center;
 }
 
 .audio-meter-label {
@@ -149,6 +111,20 @@
   background-color: #f7fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+}
+
+.checkbox {
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  color: #4a5568;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
 }
 
 .checkbox-group:hover {
@@ -224,6 +200,20 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.preview-container {
+  margin-bottom: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #000;
+}
+
+.preview-video {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: contain;
 }
 
 .area-selection-group {
@@ -355,6 +345,20 @@
 
 .button-stop:hover {
   background-color: #c82333;
+}
+
+.recording-preview-container {
+  position: relative;
+  width: 320px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.recording-preview-video {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 .preview-toggle {

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "allowSyntheticDefaultImports": true,
+    "outDir": "dist/main"
+  },
+  "include": [
+    "vite.config.ts",
+    "electron/**/*.ts"
+  ]
+} 

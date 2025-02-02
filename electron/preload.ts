@@ -9,12 +9,18 @@ const validInvokeChannels = [
   'START_RECORDING',
   'STOP_RECORDING',
   'GET_SELECTED_AREA',
-  'SAVE_VIDEO'
+  'SAVE_VIDEO',
+  'START_AREA_SELECTION',
+  'AREA_SELECTED',
+  'CANCEL_SELECTION',
+  'GET_SYSTEM_AUDIO_ACCESS',
+  'MOUSE_POSITION_UPDATE'
 ] as const
 
 const validListenChannels = [
   'MOUSE_POSITION_UPDATE',
-  'CONVERSION_PROGRESS'
+  'CONVERSION_PROGRESS',
+  'MOUSE_POSITION'
 ] as const
 
 type InvokeChannel = typeof validInvokeChannels[number]
@@ -26,23 +32,44 @@ contextBridge.exposeInMainWorld(
   'electron',
   {
     ipcRenderer: {
-      invoke: (channel: InvokeChannel, ...args: any[]) => {
-        if (validInvokeChannels.includes(channel)) {
-          return ipcRenderer.invoke(channel, ...args)
+      invoke: async (channel: string, ...args: any[]) => {
+        const validChannels = [
+          'GET_ALL_SOURCES',
+          'SAVE_VIDEO',
+          'START_MOUSE_TRACKING',
+          'STOP_MOUSE_TRACKING',
+          'GET_SYSTEM_AUDIO_ACCESS',
+          'CHECK_AUDIO_DRIVER',
+          'START_AREA_SELECTION',
+          'AREA_SELECTED',
+          'CANCEL_SELECTION',
+          'GET_SELECTED_AREA',
+          'START_RECORDING',
+          'STOP_RECORDING',
+          'MOUSE_POSITION_UPDATE'
+        ];
+        
+        if (validChannels.includes(channel)) {
+          return ipcRenderer.invoke(channel, ...args);
         }
-        throw new Error(`Invalid invoke channel: ${channel}`)
       },
-      on: (channel: ListenChannel, callback: (...args: any[]) => void) => {
-        if (validListenChannels.includes(channel)) {
-          const subscription = (_: any, ...args: any[]) => callback(...args)
-          ipcRenderer.on(channel, subscription)
+      on: (channel: string, callback: (...args: any[]) => void) => {
+        if (channel === 'MOUSE_POSITION_UPDATE' || channel === 'CONVERSION_PROGRESS') {
+          const subscription = (_: any, ...args: any[]) => callback(...args);
+          ipcRenderer.on(channel, subscription);
+          // Return unsubscribe function
           return () => {
-            ipcRenderer.removeListener(channel, subscription)
-          }
+            ipcRenderer.removeListener(channel, subscription);
+          };
         }
-        // Return a no-op cleanup function if channel is not valid
-        return () => {}
+        // Return no-op function for invalid channels
+        return () => {};
       }
     }
   }
-) 
+)
+
+// Add mouse position event handler
+ipcRenderer.on('MOUSE_POSITION', (_, position) => {
+  window.dispatchEvent(new CustomEvent('mouse-position', { detail: position }))
+}) 

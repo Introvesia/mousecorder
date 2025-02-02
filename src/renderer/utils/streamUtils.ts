@@ -1,4 +1,4 @@
-import { Area } from '../../../electron/types'
+import { Area } from '../../types'
 
 export const cropStream = (stream: MediaStream, area: Area): MediaStream => {
   const canvas = document.createElement('canvas')
