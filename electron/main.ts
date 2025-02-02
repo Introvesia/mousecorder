@@ -78,22 +78,60 @@ const getFfmpegPath = () => {
 
 // Add IPC handlers
 const setupIpcHandlers = () => {
-  // Check for BlackHole audio driver on macOS
+  // Check for audio permissions and devices
   ipcMain.handle('CHECK_AUDIO_DRIVER', async () => {
-    if (process.platform === 'darwin') {
-      const devices = await systemPreferences.getMediaAccessStatus('microphone');
-      return devices === 'granted';
+    try {
+      if (process.platform === 'darwin') {
+        // Request microphone access first
+        await systemPreferences.askForMediaAccess('microphone');
+        const status = await systemPreferences.getMediaAccessStatus('microphone');
+        console.log('Microphone access status:', status);
+        
+        // Get audio devices
+        const devices = await mainWindow?.webContents.executeJavaScript(`
+          navigator.mediaDevices.enumerateDevices()
+            .then(devices => devices.filter(d => d.kind === 'audioinput'))
+        `);
+        console.log('Available audio devices:', devices);
+        
+        return {
+          permission: status === 'granted',
+          devices: devices || []
+        };
+      }
+      return { permission: true, devices: [] };
+    } catch (error) {
+      console.error('Error checking audio permissions:', error);
+      return { permission: false, devices: [], error: error.message };
     }
-    return true;
   });
 
   // Get all screen sources
   ipcMain.handle('GET_ALL_SOURCES', async () => {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen', 'window'],
-      thumbnailSize: { width: 150, height: 150 }
-    });
-    return { sources };
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 150, height: 150 },
+        fetchWindowIcons: true
+      });
+
+      // Get audio devices if on macOS
+      let audioDevices = [];
+      if (process.platform === 'darwin') {
+        audioDevices = await mainWindow?.webContents.executeJavaScript(`
+          navigator.mediaDevices.enumerateDevices()
+            .then(devices => devices.filter(d => d.kind === 'audioinput'))
+        `);
+      }
+
+      return { 
+        sources,
+        audioDevices: audioDevices || []
+      };
+    } catch (error) {
+      console.error('Error getting sources:', error);
+      throw error;
+    }
   });
 
   // Mouse tracking handlers
@@ -157,10 +195,16 @@ const setupIpcHandlers = () => {
       console.log('Using ffmpeg path:', ffmpegPath);
       ffmpeg.setFfmpegPath(ffmpegPath);
 
-      // Show save dialog
+      // Generate timestamp for filename
+      const timestamp = new Date().toISOString()
+        .replace(/[:.]/g, '-')  // Replace colons and periods with hyphens
+        .replace('T', '_')      // Replace T with underscore
+        .slice(0, -5);          // Remove milliseconds and timezone
+
+      // Show save dialog with timestamped default filename
       const { filePath, canceled } = await dialog.showSaveDialog({
         title: 'Save Recording',
-        defaultPath: `recording.${format}`,
+        defaultPath: `recording_${timestamp}.${format}`,
         filters: [
           { name: 'Video Files', extensions: [format] }
         ]
@@ -268,25 +312,35 @@ const createWindow = async (): Promise<void> => {
     backgroundColor: '#ffffff'
   };
 
-  // Update permission handler
+  // Set up permissions
   mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'screen', 'audioCapture'];
     if (allowedPermissions.includes(permission)) {
+      console.log(`Granting permission: ${permission}`);
       callback(true);
     } else {
+      console.log(`Denying permission: ${permission}`);
       callback(false);
     }
   });
 
-  // Add specific permission check for desktop capture
   mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    return ['media', 'screen', 'audioCapture'].includes(permission);
+    const allowedPermissions = ['media', 'screen', 'audioCapture'];
+    const isAllowed = allowedPermissions.includes(permission);
+    console.log(`Permission check for ${permission}: ${isAllowed}`);
+    return isAllowed;
   });
 
-  // Enable system audio capture for macOS
+  // Request audio permissions early
   if (process.platform === 'darwin') {
-    mainWindow.webContents.on('did-start-navigation', () => {
-      systemPreferences.askForMediaAccess('microphone');
+    mainWindow.webContents.on('did-finish-load', async () => {
+      try {
+        await systemPreferences.askForMediaAccess('microphone');
+        const status = await systemPreferences.getMediaAccessStatus('microphone');
+        console.log('Initial microphone access status:', status);
+      } catch (error) {
+        console.error('Error requesting microphone access:', error);
+      }
     });
   }
 };
