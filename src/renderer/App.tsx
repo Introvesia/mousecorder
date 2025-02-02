@@ -13,8 +13,9 @@ import {
   MediaTrackConstraintSet,
   DesktopCaptureMediaTrackConstraints,
   CustomMediaStreamConstraints,
-  Area
-} from '../types';
+  Area,
+  MousePosition
+} from '../types/index';
 
 // Declare window interface extension
 declare global {
@@ -346,8 +347,7 @@ const App: React.FC = () => {
           isShorts: true,
           zoom: shortsZoom
         });
-        
-        // Store the stream reference for position updates
+
         recordingStreamRef.current = stream;
         finalStream = stream;
       } else if (settings.areaSelection) {
@@ -545,7 +545,11 @@ const App: React.FC = () => {
 
         // Update stream position if recording
         if (recording && recordingStreamRef.current?.updatePosition) {
-          recordingStreamRef.current.updatePosition(x, y);
+          try {
+            recordingStreamRef.current.updatePosition(x, y);
+          } catch (error) {
+            console.error('Error updating position:', error);
+          }
         }
 
         // Only update settings if not recording
@@ -561,16 +565,19 @@ const App: React.FC = () => {
           }));
         }
       };
-
+      
       // Start tracking global mouse position
-      window.electron.ipcRenderer.invoke('START_MOUSE_TRACKING');
+      window.electron.ipcRenderer.invoke('START_MOUSE_TRACKING')
+        .then(() => console.log('Mouse tracking started'))
+        .catch(err => console.error('Failed to start mouse tracking:', err));
       
       // Add event listener using custom events
       window.addEventListener('mouse-position', handleGlobalMouseMove as EventListener);
 
       return () => {
-        // Clean up
-        window.electron.ipcRenderer.invoke('STOP_MOUSE_TRACKING');
+        window.electron.ipcRenderer.invoke('STOP_MOUSE_TRACKING')
+          .then(() => console.log('Mouse tracking stopped'))
+          .catch(err => console.error('Failed to stop mouse tracking:', err));
         window.removeEventListener('mouse-position', handleGlobalMouseMove as EventListener);
       };
     }
@@ -598,6 +605,13 @@ const App: React.FC = () => {
       }
     }
   }, [sources, isYouTubeShorts]);
+
+  // Update this effect
+  useEffect(() => {
+    const unsubscribe = window.electron.ipcRenderer.onMousePosition((position: MousePosition) => {});
+
+    return unsubscribe;
+  }, []);
 
   return (
     <div className={`container ${recording ? 'recording-mode' : ''}`}>

@@ -1,3 +1,4 @@
+import { MousePosition } from '@/types/index'
 import { contextBridge, ipcRenderer } from 'electron'
 
 // Whitelist of valid channels
@@ -64,12 +65,19 @@ contextBridge.exposeInMainWorld(
         }
         // Return no-op function for invalid channels
         return () => {};
+      },
+      onMousePosition: (callback: (position: MousePosition) => void): (() => void) => {
+        const subscription = (_: any, position: any) => {
+          window.dispatchEvent(new CustomEvent('mouse-position', { 
+            detail: position 
+          }));
+          callback(position);
+        };
+        ipcRenderer.on('MOUSE_POSITION_UPDATE', subscription);
+        return () => {
+          ipcRenderer.removeListener('MOUSE_POSITION_UPDATE', subscription);
+        };
       }
     }
   }
-)
-
-// Add mouse position event handler
-ipcRenderer.on('MOUSE_POSITION', (_, position) => {
-  window.dispatchEvent(new CustomEvent('mouse-position', { detail: position }))
-}) 
+) 
