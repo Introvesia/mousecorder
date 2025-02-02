@@ -7,6 +7,11 @@ interface CropArea {
   zoom?: number;
 }
 
+interface EnhancedMediaStream extends MediaStream {
+  cleanup: () => void;
+  updatePosition: (x: number, y: number) => void;
+}
+
 export const cropStream = async (stream: MediaStream, area: CropArea): Promise<MediaStream> => {
   const videoTrack = stream.getVideoTracks()[0];
   const { width: sourceWidth, height: sourceHeight } = videoTrack.getSettings();
@@ -46,7 +51,6 @@ export const cropStream = async (stream: MediaStream, area: CropArea): Promise<M
 
   // Create a function to update coordinates
   const updateCoordinates = (newX: number, newY: number) => {
-    console.log('updateCoordinates', newX, newY);
     const zoom = area.zoom || 1;
     // Calculate scaled dimensions once
     const scaledShortWidth = Math.round(1080 * screenToVideoScale / zoom);
@@ -147,7 +151,9 @@ export const cropStream = async (stream: MediaStream, area: CropArea): Promise<M
   (canvasStream as any).cleanup = cleanup;
 
   // Add the update function to the stream object
-  (canvasStream as any).updatePosition = updateCoordinates;
+  (canvasStream as any).updatePosition = (...args: [number, number]) => {
+    updateCoordinates(...args);
+  };
 
-  return canvasStream;
+  return canvasStream as EnhancedMediaStream;
 }; 

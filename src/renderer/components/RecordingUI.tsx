@@ -1,20 +1,16 @@
 import React, { useEffect } from 'react';
 import './RecordingUI.css';
+import { MousePosition } from '../../types';
 
 interface RecordingUIProps {
   recordingTime: number;
-  onStopRecording: () => void;
+  onStopRecording: () => Promise<void>;
   showRecordingPreview: boolean;
   setShowRecordingPreview: (show: boolean) => void;
   recordingPreviewRef: React.RefObject<HTMLVideoElement>;
   autoMove: boolean;
+  isRecording: boolean;
 }
-
-const formatTime = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
 
 const RecordingUI: React.FC<RecordingUIProps> = ({
   recordingTime,
@@ -22,30 +18,46 @@ const RecordingUI: React.FC<RecordingUIProps> = ({
   showRecordingPreview,
   setShowRecordingPreview,
   recordingPreviewRef,
-  autoMove
+  autoMove,
+  isRecording
 }) => {
-  useEffect(() => {
-    if (autoMove) {
-      const handleMouseMove = (e: MouseEvent) => {
-        window.electron.ipcRenderer.invoke('MOUSE_POSITION_UPDATE', {
-          x: e.screenX,
-          y: e.screenY,
-          autoMove
-        });
-      };
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
-      window.addEventListener('mousemove', handleMouseMove);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-      };
-    } else {
-      window.electron.ipcRenderer.invoke('MOUSE_POSITION_UPDATE', {
-        x: 0,
-        y: 0,
-        autoMove
+  useEffect(() => {
+    if (isRecording) {
+      let unsubscribeFunction: (() => void) | undefined;
+
+      unsubscribeFunction = window.electron.ipcRenderer.on('MOUSE_POSITION_UPDATE', (position: MousePosition) => {
+        if (recordingPreviewRef.current && autoMove) {
+          const video = recordingPreviewRef.current;
+          const screenWidth = window.innerWidth;
+          
+          if (position.x > screenWidth - 350) {
+            video.style.right = 'auto';
+            video.style.left = '10px';
+          } else {
+            video.style.left = 'auto';
+            video.style.right = '10px';
+          }
+        }
       });
+
+      window.electron.ipcRenderer.invoke('START_MOUSE_TRACKING')
+        .catch(console.error);
+
+      return () => {
+        window.electron.ipcRenderer.invoke('STOP_MOUSE_TRACKING')
+          .catch(console.error);
+        if (unsubscribeFunction) {
+          unsubscribeFunction();
+        }
+      };
     }
-  }, [autoMove]);
+  }, [isRecording, autoMove]);
 
   return (
     <div className="recording-ui">
@@ -56,13 +68,6 @@ const RecordingUI: React.FC<RecordingUIProps> = ({
             onClick={onStopRecording}
           >
             Stop Recording
-          </button>
-          
-          <button 
-            className="preview-toggle-button"
-            onClick={() => setShowRecordingPreview(!showRecordingPreview)}
-          >
-            {showRecordingPreview ? 'Hide Preview' : 'Show Preview'}
           </button>
 
           <div className="timer">
@@ -75,10 +80,16 @@ const RecordingUI: React.FC<RecordingUIProps> = ({
             <video
               ref={recordingPreviewRef}
               autoPlay
-              muted
               playsInline
+              muted
               className="recording-preview-video"
             />
+            <button 
+              className="preview-toggle"
+              onClick={() => setShowRecordingPreview(false)}
+            >
+              Hide Preview
+            </button>
           </div>
         )}
       </div>

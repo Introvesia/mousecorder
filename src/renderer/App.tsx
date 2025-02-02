@@ -4,86 +4,23 @@ import './App.css';
 import AreaSelector from './components/AreaSelector';
 import { cropStream } from './utils/streamUtils';
 import AudioMeter from './components/AudioMeter';
-import { ipcRenderer } from 'electron';
 import RecordingUI from './components/RecordingUI';
 import ConversionProgress from './components/ConversionProgress';
+import { 
+  CustomMediaStream, 
+  VideoSettings, 
+  IElectronAPI,
+  MediaTrackConstraintSet,
+  DesktopCaptureMediaTrackConstraints,
+  CustomMediaStreamConstraints,
+  Area,
+  MousePosition
+} from '../types/index';
 
+// Declare window interface extension
 declare global {
   interface Window {
-    electron: {
-      ipcRenderer: {
-        invoke(channel: string, ...args: any[]): Promise<any>;
-        on(channel: string, callback: (...args: any[]) => void): void;
-      };
-    };
-  }
-
-  interface MediaTrackConstraintSet {
-    chromeMediaSource?: string;
-    chromeMediaSourceId?: string;
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-  }
-
-  interface DesktopCapturerConstraints extends MediaTrackConstraints {
-    mandatory?: {
-      chromeMediaSource?: string;
-      chromeMediaSourceId?: string;
-    };
-  }
-
-  interface DesktopCapturerSource {
-    id: string;
-    name: string;
-    thumbnail: Electron.NativeImage;
-    display_id?: string;
-  }
-
-  interface MediaStreamConstraintSet {
-    mandatory?: {
-      chromeMediaSource?: 'desktop' | 'screen';
-      chromeMediaSourceId?: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface CustomMediaTrackConstraints extends MediaTrackConstraints {
-    mandatory?: {
-      chromeMediaSource?: 'desktop' | 'screen';
-      chromeMediaSourceId?: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface DesktopCaptureMediaTrackConstraints {
-    mandatory: {
-      chromeMediaSource: 'desktop';
-      chromeMediaSourceId: string;
-      minWidth?: number;
-      maxWidth?: number;
-      minHeight?: number;
-      maxHeight?: number;
-    };
-  }
-
-  interface CustomMediaStreamConstraints {
-    audio: boolean | DesktopCaptureMediaTrackConstraints;
-    video: DesktopCaptureMediaTrackConstraints;
-  }
-
-  interface Area {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+    electron: IElectronAPI;
   }
 }
 
@@ -92,20 +29,6 @@ declare const navigator: Navigator & {
     platform: string;
   };
 };
-
-interface VideoSettings {
-  sourceId: string;
-  includeAudio: boolean;
-  format: string;
-  quality: string;
-  fps: number;
-  areaSelection: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null;
-}
 
 interface Source {
   id: string;
@@ -125,17 +48,13 @@ const App: React.FC = () => {
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [sources, setSources] = useState<Source[]>([]);
-  const [settings, setSettings] = useState<VideoSettings>(() => {
-    const initialSettings = {
-      sourceId: '',
-      includeAudio: false,
-      format: 'mp4',
-      quality: 'high',
-      fps: 30,
-      areaSelection: null
-    };
-    console.log('Initial settings:', initialSettings);
-    return initialSettings;
+  const [settings, setSettings] = useState<VideoSettings>({
+    sourceId: '',
+    includeAudio: false,
+    format: 'mp4',
+    quality: 'high',
+    fps: 30,
+    areaSelection: null
   });
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -257,7 +176,7 @@ const App: React.FC = () => {
           };
 
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          previewStreamRef.current = stream;
+          previewStreamRef.current = stream as CustomMediaStream;
           previewRef.current.srcObject = stream;
         } catch (error) {
           console.error('Error starting preview:', error);
@@ -336,7 +255,7 @@ const App: React.FC = () => {
     };
   }, [micEnabled, recording, selectedMicDevice]);
 
-  const getVideoConstraints = (quality: string) => {
+  const getVideoConstraints = (quality: string): MediaTrackConstraints => {
     const qualities = {
       high: { width: 1920, height: 1080 },
       medium: { width: 1280, height: 720 },
@@ -345,7 +264,7 @@ const App: React.FC = () => {
     return qualities[quality as keyof typeof qualities];
   };
 
-  const getMimeType = (format: string) => {
+  const getMimeType = (format: string): string => {
     const mimeTypes = {
       'webm': 'video/webm;codecs=vp9',
       'mp4': 'video/mp4'
@@ -412,7 +331,7 @@ const App: React.FC = () => {
             chromeMediaSourceId: settings.sourceId
           }
         } : false
-      } as any);
+      } as CustomMediaStreamConstraints);
 
       let finalStream: MediaStream = screenStream;
 
@@ -428,15 +347,11 @@ const App: React.FC = () => {
           isShorts: true,
           zoom: shortsZoom
         });
-        
-        // Store the stream reference for position updates
+
         recordingStreamRef.current = stream;
         finalStream = stream;
       } else if (settings.areaSelection) {
-        finalStream = await cropStream(finalStream, {
-          ...settings.areaSelection,
-          isShorts: false
-        });
+        finalStream = await cropStream(finalStream, settings.areaSelection);
       }
 
       // Collect all tracks
@@ -554,7 +469,7 @@ const App: React.FC = () => {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setRecording(false);
@@ -568,7 +483,11 @@ const App: React.FC = () => {
         cleanupRef.current();
         cleanupRef.current = null;
       }
+
+      // Return a resolved promise
+      return Promise.resolve();
     }
+    return Promise.resolve();
   };
 
   const showAudioWarning = () => {
@@ -626,7 +545,11 @@ const App: React.FC = () => {
 
         // Update stream position if recording
         if (recording && recordingStreamRef.current?.updatePosition) {
-          recordingStreamRef.current.updatePosition(x, y);
+          try {
+            recordingStreamRef.current.updatePosition(x, y);
+          } catch (error) {
+            console.error('Error updating position:', error);
+          }
         }
 
         // Only update settings if not recording
@@ -642,16 +565,19 @@ const App: React.FC = () => {
           }));
         }
       };
-
+      
       // Start tracking global mouse position
-      window.electron.ipcRenderer.invoke('START_MOUSE_TRACKING');
+      window.electron.ipcRenderer.invoke('START_MOUSE_TRACKING')
+        .then(() => console.log('Mouse tracking started'))
+        .catch(err => console.error('Failed to start mouse tracking:', err));
       
       // Add event listener using custom events
       window.addEventListener('mouse-position', handleGlobalMouseMove as EventListener);
 
       return () => {
-        // Clean up
-        window.electron.ipcRenderer.invoke('STOP_MOUSE_TRACKING');
+        window.electron.ipcRenderer.invoke('STOP_MOUSE_TRACKING')
+          .then(() => console.log('Mouse tracking stopped'))
+          .catch(err => console.error('Failed to stop mouse tracking:', err));
         window.removeEventListener('mouse-position', handleGlobalMouseMove as EventListener);
       };
     }
@@ -680,6 +606,13 @@ const App: React.FC = () => {
     }
   }, [sources, isYouTubeShorts]);
 
+  // Update this effect
+  useEffect(() => {
+    const unsubscribe = window.electron.ipcRenderer.onMousePosition((position: MousePosition) => {});
+
+    return unsubscribe;
+  }, []);
+
   return (
     <div className={`container ${recording ? 'recording-mode' : ''}`}>
       {!recording && <h1 className="title">MouseCorder</h1>}
@@ -693,6 +626,7 @@ const App: React.FC = () => {
             setShowRecordingPreview={setShowRecordingPreview}
             recordingPreviewRef={recordingPreviewRef}
             autoMove={autoMovePreview}
+            isRecording={recording}
           />
         ) : (
           <>
