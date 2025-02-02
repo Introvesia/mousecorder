@@ -19,8 +19,6 @@ export interface Area {
   y: number;
   width: number;
   height: number;
-  isShorts?: boolean;
-  zoom?: number;
 }
 
 export interface VideoSettings {
