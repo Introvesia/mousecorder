@@ -1,7 +1,11 @@
-import { app, BrowserWindow, ipcMain, desktopCapturer, screen, systemPreferences } from 'electron'
+import { app, BrowserWindow, ipcMain, desktopCapturer, screen, systemPreferences, dialog } from 'electron'
 import path from 'path'
 import isDev from 'electron-is-dev'
 import { MousePosition } from '../src/types'
+import fs from 'fs'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegStatic from 'ffmpeg-static'
+import ffprobeStatic from 'ffprobe-static'
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -60,6 +64,16 @@ const waitForDevServer = async (url: string, maxAttempts = 30): Promise<boolean>
   }
   console.error('Dev server failed to start after maximum attempts');
   return false;
+};
+
+// Get the correct ffmpeg path based on development or production
+const getFfmpegPath = () => {
+  if (isDev) {
+    return require('ffmpeg-static');
+  } else {
+    // In production, ffmpeg is in resources directory
+    return path.join(process.resourcesPath, 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  }
 };
 
 // Add IPC handlers
@@ -135,22 +149,77 @@ const setupIpcHandlers = () => {
 
   // Save video handler
   ipcMain.handle('SAVE_VIDEO', async (_, { buffer, format, quality, fps }) => {
-    // Implementation for saving video
-    // You'll need to implement this based on your requirements
-    return true;
+    try {
+      // Set ffmpeg path
+      const ffmpegPath = getFfmpegPath();
+      console.log('Using ffmpeg path:', ffmpegPath);
+      ffmpeg.setFfmpegPath(ffmpegPath);
+
+      // Show save dialog
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Save Recording',
+        defaultPath: `recording.${format}`,
+        filters: [
+          { name: 'Video Files', extensions: [format] }
+        ]
+      });
+
+      if (canceled || !filePath) {
+        return false;
+      }
+
+      // Save the buffer to a temporary file
+      const tempPath = path.join(app.getPath('temp'), `temp-${Date.now()}.webm`);
+      await fs.promises.writeFile(tempPath, Buffer.from(buffer));
+
+      // Convert video based on settings
+      return new Promise((resolve, reject) => {
+        const command = ffmpeg(tempPath);
+
+        // Apply quality settings
+        switch (quality) {
+          case 'high':
+            command.videoBitrate('2500k');
+            break;
+          case 'medium':
+            command.videoBitrate('1500k');
+            break;
+          case 'low':
+            command.videoBitrate('800k');
+            break;
+        }
+
+        // Set FPS
+        command.fps(fps);
+
+        // Progress handler
+        command.on('progress', (progress) => {
+          mainWindow?.webContents.send('CONVERSION_PROGRESS', Math.round(progress.percent));
+        });
+
+        command
+          .output(filePath)
+          .on('end', () => {
+            // Clean up temp file
+            fs.unlink(tempPath, (err) => {
+              if (err) console.error('Error deleting temp file:', err);
+            });
+            resolve(filePath);
+          })
+          .on('error', (err) => {
+            console.error('Error converting video:', err);
+            reject(err);
+          })
+          .run();
+      });
+    } catch (error) {
+      console.error('Error saving video:', error);
+      throw error;
+    }
   });
 };
 
 const createWindow = async (): Promise<void> => {
-  if (isDev) {
-    const devServerReady = await waitForDevServer('http://localhost:5173');
-    if (!devServerReady) {
-      console.error('Dev server not ready, exiting...');
-      app.quit();
-      return;
-    }
-  }
-
   mainWindow = new BrowserWindow({
     width: originalWindowState.width,
     height: originalWindowState.height,
@@ -163,6 +232,7 @@ const createWindow = async (): Promise<void> => {
     },
   });
 
+  // Remove the dev server check since wait-on handles it
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
